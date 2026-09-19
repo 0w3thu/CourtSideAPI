@@ -2,8 +2,10 @@
 using CourtSideAPI.Model;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client.NativeInterop;
 using Microsoft.IdentityModel.Tokens;
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -19,12 +21,17 @@ namespace CourtSideAPI.Controllers
         private readonly AppDbContext _db;
         private readonly IConfiguration _configuration;
 
-        public AuthenticationController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<Guid>> roleManager, AppDbContext db, IConfiguration configuration)
+
+        //Refresh Tokens
+        private readonly TokenValidationParameters _tokenValidationParameters;
+
+        public AuthenticationController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<Guid>> roleManager, AppDbContext db, IConfiguration configuration, TokenValidationParameters tokenValidationParameters)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _db = db;
             _configuration  = configuration;
+            _tokenValidationParameters = tokenValidationParameters;
         }
 
         [HttpPost("register")]
@@ -91,7 +98,7 @@ namespace CourtSideAPI.Controllers
 
                 if (existingUser != null && await _userManager.CheckPasswordAsync(existingUser, user.Password))
                 {
-                    var tokenValue = await GenerateJwtToken(existingUser);
+                    var tokenValue = await GenerateJwtTokenAsync(existingUser, ""); 
                     return Ok(tokenValue);
                 }
 
@@ -109,7 +116,96 @@ namespace CourtSideAPI.Controllers
 
         }
 
-        private async Task<AuthResultDTO> GenerateJwtToken(ApplicationUser user)
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken([FromBody] TokenRequestDTO payload)
+        {
+            try 
+            {
+                var result = await VerifyAndGenerateTokenAysnc(payload);
+
+                if (result == null) return BadRequest("Invalud Tokens");
+
+                return Ok(result);
+
+            } catch (Exception ex) 
+            {
+                Console.WriteLine($"Registration Error: {ex.Message}");
+
+                return StatusCode(500, new
+                {
+                    message = "An error occured during Token Refreshing"
+                });
+            }
+        }
+
+        private async Task<AuthResultDTO> VerifyAndGenerateTokenAysnc(TokenRequestDTO payload)
+        {
+            try
+            {
+                var jwtTokenHanler = new JwtSecurityTokenHandler();
+
+                //Add Validations
+
+                //Check 1. Check JWT Format
+                var tokenInVerification = jwtTokenHanler.ValidateToken(payload.Token, _tokenValidationParameters, out var validatedToken);
+
+                //2. Encryption algorithm 
+                if (validatedToken is JwtSecurityToken jwtSecurityToken)
+                {
+                    var result = jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase);
+
+                    if (result == false) return null;
+
+                }
+
+                //Check 3. Validate expiry date
+                var utcExpiryDate = long.Parse(tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp).Value);
+
+                var expiryDate = UnixTimeStampToDateTimeUTC(utcExpiryDate);
+                if (expiryDate > DateTime.UtcNow) throw new Exception("Token has not expired yet");
+
+                //Check 4 . Refresh token exists in the DB
+                var dbRefreshToken = await _db.RefreshTokens.FirstOrDefaultAsync(n => n.Token == payload.RefreshToken);
+
+                if (dbRefreshToken is null) throw new Exception("Refresh token does not exist in  our database");
+                else
+                {
+                    //Check 5 - Validate Id
+                    var jti = tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
+
+                    if (dbRefreshToken.JwtId != jti) throw new Exception("Token does not match");
+
+                    if (dbRefreshToken.DateExpired <= DateTime.UtcNow) throw new Exception("Your refresh token has expired please re-authenticate ");
+
+                    if (dbRefreshToken.isRevoked) throw new Exception("Refresh Token is revoked");
+
+
+                    //Generate new Token (with existing refresh token)
+                    var dbUserData = await _userManager.FindByIdAsync(dbRefreshToken.UserId.ToString());
+
+                    var newTokenResponse = GenerateJwtTokenAsync(dbUserData, payload.RefreshToken);
+
+                    return await newTokenResponse;
+                }
+            } catch(Exception ex)
+            {
+                 
+                Console.WriteLine($"Refresh Token Error: {ex.Message}");
+                throw;
+            }
+      
+        }
+
+ 
+
+        private DateTime UnixTimeStampToDateTimeUTC(long unixTimeStamp)
+        {
+            var dateTimeVal = new DateTime(1070, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            dateTimeVal = dateTimeVal.AddSeconds(unixTimeStamp);
+            return dateTimeVal;
+        }
+
+        private async Task<AuthResultDTO> GenerateJwtTokenAsync(ApplicationUser user, string exisitingRefreshToken)
         {
             var authClaims = new List<Claim>()
              {
@@ -131,24 +227,29 @@ namespace CourtSideAPI.Controllers
                 );
 
             var jwtToken = new JwtSecurityTokenHandler().WriteToken(token);
+            var refreshToken = new RefreshToken();
+            
 
-            var refreshToken = new RefreshToken()
+            if (String.IsNullOrEmpty(exisitingRefreshToken))
             {
-                JwtId = token.Id,
-                isRevoked = false,
-                UserId = user.Id,
-                DateAdded = DateTime.UtcNow,
-                DateExpired = DateTime.UtcNow.AddMonths(6),
-                Token = Guid.NewGuid().ToString()
-            };
+                 refreshToken = new RefreshToken()
+                {
+                    JwtId = token.Id,
+                    isRevoked = false,
+                    UserId = user.Id,
+                    DateAdded = DateTime.UtcNow,
+                    DateExpired = DateTime.UtcNow.AddMonths(6),
+                    Token = Guid.NewGuid().ToString()
+                };
 
-            await _db.RefreshTokens.AddAsync(refreshToken);
-            await _db.SaveChangesAsync();
+                await _db.RefreshTokens.AddAsync(refreshToken);
+                await _db.SaveChangesAsync();
+            }
 
             var response = new AuthResultDTO()
             {
                 Token = jwtToken,
-                RefreshToken = refreshToken.Token,
+                RefreshToken = (string.IsNullOrEmpty(exisitingRefreshToken)) ? refreshToken.Token : exisitingRefreshToken,
                 ExpireAt = token.ValidTo
             };
 
