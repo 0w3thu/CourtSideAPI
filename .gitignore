@@ -1,2 +1,6 @@
-﻿#Ignoring folders
-.vs
+﻿# Visual Studio
+.vs/
+
+# Build output
+bin/
+obj/

@@ -4,14 +4,14 @@ namespace CourtSideAPI.Model
 {
     public class ApplicationUserDTO
     {
-        [Required]
+        [Required (ErrorMessage = "Fullname Required")]
         public string FullName { get; set; } = string.Empty;
 
         [Required]
+        [EmailAddress(ErrorMessage = "Invalid email address format.")]
         public string Email { get; set; } = string.Empty;
 
-        public UserRole Role { get; set; }
-
+        [Required(ErrorMessage = "Password Required")]
         public string Password { get; set; } =  string.Empty;
     }
 }
