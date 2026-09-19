@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CourtSideAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce4c8920153aab79b76e7eb9fe2a069035b537bd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0b07040376ffc1715853efc374881419166d8b49")]
 [assembly: System.Reflection.AssemblyProductAttribute("CourtSideAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CourtSideAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

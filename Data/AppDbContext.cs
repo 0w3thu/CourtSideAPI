@@ -17,6 +17,7 @@ namespace CourtSideAPI.Data
         public DbSet<Player> Players { get; set; }
         public DbSet<Guest> Guests { get; set; }
         public DbSet<Team> Teams { get; set; }
+        public DbSet<RefreshToken> RefreshTokens {  get; set; }
              
 
         protected override void OnModelCreating(ModelBuilder builder)
