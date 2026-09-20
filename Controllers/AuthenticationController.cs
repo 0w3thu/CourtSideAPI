@@ -129,12 +129,20 @@ namespace CourtSideAPI.Controllers
 
             } catch (Exception ex) 
             {
+                //    Console.WriteLine($"Registration Error: {ex.Message}");
+
+                //    return StatusCode(500, new
+                //    {
+                //        message = "An error occured during Token Refreshing"
+                //    });
+
                 Console.WriteLine($"Registration Error: {ex.Message}");
 
                 return StatusCode(500, new
                 {
-                    message = "An error occured during Token Refreshing"
+                    message = ex.Message
                 });
+
             }
         }
 
@@ -144,10 +152,27 @@ namespace CourtSideAPI.Controllers
             {
                 var jwtTokenHanler = new JwtSecurityTokenHandler();
 
+
+                var refreshTokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = _tokenValidationParameters.IssuerSigningKey,
+
+                    ValidateIssuer = true,
+                    ValidIssuer = _tokenValidationParameters.ValidIssuer,
+
+                    ValidateAudience = true,
+                    ValidAudience = _tokenValidationParameters.ValidAudience,
+
+                    ValidateLifetime = false,
+                    ClockSkew = TimeSpan.Zero
+                };
+
+
                 //Add Validations
 
                 //Check 1. Check JWT Format
-                var tokenInVerification = jwtTokenHanler.ValidateToken(payload.Token, _tokenValidationParameters, out var validatedToken);
+                var tokenInVerification = jwtTokenHanler.ValidateToken(payload.Token, refreshTokenValidationParameters, out var validatedToken);
 
                 //2. Encryption algorithm 
                 if (validatedToken is JwtSecurityToken jwtSecurityToken)
@@ -200,7 +225,7 @@ namespace CourtSideAPI.Controllers
 
         private DateTime UnixTimeStampToDateTimeUTC(long unixTimeStamp)
         {
-            var dateTimeVal = new DateTime(1070, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+            var dateTimeVal = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
             dateTimeVal = dateTimeVal.AddSeconds(unixTimeStamp);
             return dateTimeVal;
         }
