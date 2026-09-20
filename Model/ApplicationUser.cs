@@ -3,8 +3,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace CourtSideAPI.Model
 {
-
-    public enum UserRole{ Coach,Admin,Player,Guest}
     public enum SyncStatus { Pending, Synced, Conflict}
 
     public class ApplicationUser: IdentityUser<Guid>
@@ -32,15 +30,15 @@ namespace CourtSideAPI.Model
 
     public class Coach : ApplicationUser
     {
-        public int TeamId { get; set; }
-        public Team Team { get; set; }
+        public int? TeamId { get; set; }
+        public Team? Team { get; set; }
 
     }
 
     public class Player : ApplicationUser
     {
-        public int TeamId { get; set; }
-        public Team Team { get; set; }
+        public int? TeamId { get; set; }
+        public Team? Team { get; set; }
 
         public int jerseryNumber { get; set; }
 
@@ -50,9 +48,9 @@ namespace CourtSideAPI.Model
 
         public DateTime DateOfBirth { get; set; }
 
-        public bool isActive { get; set; }
+        public bool isActive { get; set; } = false;
 
-        public  SyncStatus SyncStatus { get; set; }
+        public  SyncStatus SyncStatus { get; set; } = SyncStatus.Pending;
 
     }
 

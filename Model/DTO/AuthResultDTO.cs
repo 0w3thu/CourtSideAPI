@@ -1,4 +1,4 @@
-﻿namespace CourtSideAPI.Model
+﻿namespace CourtSideAPI.Model.DTO
 {
     public class AuthResultDTO
     {

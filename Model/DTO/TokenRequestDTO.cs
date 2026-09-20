@@ -1,6 +1,6 @@
 ﻿using System.Security.Principal;
 
-namespace CourtSideAPI.Model
+namespace CourtSideAPI.Model.DTO
 {
     public class TokenRequestDTO
     {

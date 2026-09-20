@@ -1,5 +1,6 @@
 ﻿using CourtSideAPI.Data;
 using CourtSideAPI.Model;
+using CourtSideAPI.Model.DTO;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -34,8 +35,8 @@ namespace CourtSideAPI.Controllers
             _tokenValidationParameters = tokenValidationParameters;
         }
 
-        [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody]ApplicationUserDTO user)
+        [HttpPost("register/coach")]
+        public async Task<IActionResult> Register([FromBody]RegisterCoachDTO user)
         {
             if (!ModelState.IsValid)
             {
@@ -52,7 +53,7 @@ namespace CourtSideAPI.Controllers
 
                 }
 
-                ApplicationUser newUser = new ApplicationUser()
+                Coach newUser = new Coach()
                 {
                     FullName = user.FullName,
                     UserName = user.Email,
@@ -69,7 +70,7 @@ namespace CourtSideAPI.Controllers
                     // return BadRequest("User could not be craeted");
                 }
 
-
+                await _userManager.AddToRoleAsync(newUser, "Coach");
                 return Created(nameof(Register), $"User {user.Email} created");
             }
             catch (Exception ex) 
@@ -82,6 +83,61 @@ namespace CourtSideAPI.Controllers
                 });
             }
         }
+
+        [HttpPost("register/player")]
+        public async Task<IActionResult> RegisterPlayer([FromBody] RegisterPlayerDTO user)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest("Please provide all required fields");
+            }
+
+            try
+            {
+                var userExists = await _userManager.FindByEmailAsync(user.Email);
+
+                if (userExists != null)
+                {
+                    return BadRequest($"User {user.Email} already exists");
+
+                }
+
+                Player newUser = new Player()
+                {
+                    FullName = user.FullName,
+                    UserName = user.Email,
+                    Email = user.Email,
+                    jerseryNumber = user.jerseryNumber,
+                    Position = user.Position,
+                    height = user.height,
+                    DateOfBirth = user.DateOfBirth,
+                    SecurityStamp = Guid.NewGuid().ToString()
+
+                };
+
+
+                var result = await _userManager.CreateAsync(newUser, user.Password);
+
+                if (!result.Succeeded)
+                {
+                    return BadRequest(result.Errors);
+                    // return BadRequest("User could not be craeted");
+                }
+
+                await _userManager.AddToRoleAsync(newUser, "Player");
+                return Created(nameof(Register), $"User {user.Email} created");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Registration Error: {ex.Message}");
+
+                return StatusCode(500, new
+                {
+                    message = "An error occured during Registration"
+                });
+            }
+        }
+
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDTO user)
@@ -102,7 +158,7 @@ namespace CourtSideAPI.Controllers
                     return Ok(tokenValue);
                 }
 
-                return Unauthorized();
+                return Unauthorized("Email or password is incorrect. Please try again");
 
             } catch (Exception ex)
             {
@@ -123,24 +179,22 @@ namespace CourtSideAPI.Controllers
             {
                 var result = await VerifyAndGenerateTokenAysnc(payload);
 
-                if (result == null) return BadRequest("Invalud Tokens");
+                if (result == null) return BadRequest("Invalid Tokens");
 
                 return Ok(result);
 
-            } catch (Exception ex) 
+            }
+            catch (Exception ex) when (ex.Message == "Token has not expired yet")
             {
-                //    Console.WriteLine($"Registration Error: {ex.Message}");
-
-                //    return StatusCode(500, new
-                //    {
-                //        message = "An error occured during Token Refreshing"
-                //    });
-
+                return BadRequest("Token has not expired yet");
+            }
+            catch (Exception ex) 
+            {
                 Console.WriteLine($"Registration Error: {ex.Message}");
 
                 return StatusCode(500, new
                 {
-                    message = ex.Message
+                    message = "An error occured during Token Refreshing"
                 });
 
             }
@@ -221,7 +275,6 @@ namespace CourtSideAPI.Controllers
       
         }
 
- 
 
         private DateTime UnixTimeStampToDateTimeUTC(long unixTimeStamp)
         {
@@ -240,6 +293,14 @@ namespace CourtSideAPI.Controllers
                new Claim(JwtRegisteredClaimNames.Sub, user.Email ?? ""),
                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
              };
+
+            
+            var userRoles = await _userManager.GetRolesAsync(user);
+
+            foreach (var role in userRoles)
+            {
+                authClaims.Add(new Claim(ClaimTypes.Role, role));
+            }
 
             var authSigninKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_configuration["JWT:Secret"]));
             
