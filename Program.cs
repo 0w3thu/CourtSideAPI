@@ -10,7 +10,6 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 
-
 // Add services to the container.
 builder.Services.AddSwaggerGen(options =>
 {
@@ -38,8 +37,11 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<AppDbContext>(options =>
 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-
-var jwtSecret = builder.Configuration["JWT:Secret"];
+// ADDED: fail fast with a clear message instead of a null reference if the
+// secret has not been set. See Step 5 for where the secret now lives.
+var jwtSecret = builder.Configuration["JWT:Secret"]
+    ?? throw new InvalidOperationException(
+        "JWT:Secret is not configured. Run: dotnet user-secrets set \"JWT:Secret\" \"<your key>\"");
 
 if (string.IsNullOrWhiteSpace(jwtSecret))
 {
@@ -133,11 +135,8 @@ using (var scope = app.Services.CreateScope())
 
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
     app.UseSwagger();
     app.UseSwaggerUI();
-}
 
 app.UseHttpsRedirection();
 
