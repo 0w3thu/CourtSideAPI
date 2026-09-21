@@ -30,19 +30,18 @@ namespace CourtSideAPI.Model
 
     public class Coach : ApplicationUser
     {
-        public int? TeamId { get; set; }
-        public Team? Team { get; set; }
+        public ICollection<Team> Teams { get; set; } = new List<Team>();
 
     }
 
     public class Player : ApplicationUser
     {
-        public int? TeamId { get; set; }
+        public Guid? TeamId { get; set; }
         public Team? Team { get; set; }
 
         public int jerseryNumber { get; set; }
 
-        public string Position { get; set; }
+        public string Position { get; set; } = string.Empty;
 
         public double height { get; set; }
 

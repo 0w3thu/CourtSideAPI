@@ -4,22 +4,57 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+
 // Add services to the container.
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Paste ONLY the token value. Do not type the word Bearer"
+    });
+
+
+    
+    options.AddSecurityRequirement(document =>
+        new OpenApiSecurityRequirement
+        {
+            [new OpenApiSecuritySchemeReference("Bearer",document)] = new List<string>()
+        });
+});
+
+
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 
-//Token Validatio Parameters
-var tokenValidationParameters = new TokenValidationParameters()
+var jwtSecret = builder.Configuration["JWT:Secret"];
+
+if (string.IsNullOrWhiteSpace(jwtSecret))
+{
+    throw new Exception("JWT:Secret is missing.");
+}
+
+var tokenValidationParameters = new TokenValidationParameters
 {
     ValidateIssuerSigningKey = true,
-    IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(builder.Configuration["JWT:Secret"])),
+
+    IssuerSigningKey = new SymmetricSecurityKey(
+        Encoding.UTF8.GetBytes(jwtSecret)
+    ),
+
+    TryAllIssuerSigningKeys = true,
 
     ValidateIssuer = true,
     ValidIssuer = builder.Configuration["JWT:Issuer"],
@@ -28,8 +63,7 @@ var tokenValidationParameters = new TokenValidationParameters()
     ValidAudience = builder.Configuration["JWT:Audience"],
 
     ValidateLifetime = true,
-    ClockSkew = TimeSpan.Zero
-
+    ClockSkew = TimeSpan.FromMinutes(1)
 };
 
 builder.Services.AddSingleton(tokenValidationParameters);
@@ -52,9 +86,19 @@ builder.Services.AddAuthentication(options =>
 .AddJwtBearer(options =>
 {
     options.SaveToken = true;
-    options.RequireHttpsMetadata = true;
+    options.RequireHttpsMetadata = false;
     options.TokenValidationParameters = tokenValidationParameters;
 
+    options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine("JWT ERROR:");
+            Console.WriteLine(context.Exception.Message);
+
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddControllers();
@@ -98,6 +142,11 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("AllowFrontend");
+
+Console.WriteLine($"JWT Secret Loaded: {!string.IsNullOrEmpty(jwtSecret)}");
+Console.WriteLine($"JWT Secret Length: {jwtSecret?.Length}");
+Console.WriteLine($"JWT Issuer: {builder.Configuration["JWT:Issuer"]}");
+Console.WriteLine($"JWT Audience: {builder.Configuration["JWT:Audience"]}");
 
 app.UseAuthentication();
 

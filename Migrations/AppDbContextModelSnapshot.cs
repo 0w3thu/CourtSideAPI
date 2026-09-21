@@ -159,11 +159,12 @@ namespace CourtSideAPI.Migrations
 
             modelBuilder.Entity("CourtSideAPI.Model.Team", b =>
                 {
-                    b.Property<int>("TeamId")
+                    b.Property<Guid>("TeamId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("uniqueidentifier");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TeamId"));
+                    b.Property<Guid>("CoachId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Division")
                         .IsRequired()
@@ -181,6 +182,8 @@ namespace CourtSideAPI.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("TeamId");
+
+                    b.HasIndex("CoachId");
 
                     b.ToTable("Teams");
                 });
@@ -320,11 +323,6 @@ namespace CourtSideAPI.Migrations
                 {
                     b.HasBaseType("CourtSideAPI.Model.ApplicationUser");
 
-                    b.Property<int>("TeamId")
-                        .HasColumnType("int");
-
-                    b.HasIndex("TeamId");
-
                     b.HasDiscriminator().HasValue("Coach");
                 });
 
@@ -349,8 +347,8 @@ namespace CourtSideAPI.Migrations
                     b.Property<int>("SyncStatus")
                         .HasColumnType("int");
 
-                    b.Property<int>("TeamId")
-                        .HasColumnType("int");
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<double>("height")
                         .HasColumnType("float");
@@ -362,12 +360,6 @@ namespace CourtSideAPI.Migrations
                         .HasColumnType("int");
 
                     b.HasIndex("TeamId");
-
-                    b.ToTable("AspNetUsers", t =>
-                        {
-                            t.Property("TeamId")
-                                .HasColumnName("Player_TeamId");
-                        });
 
                     b.HasDiscriminator().HasValue("Player");
                 });
@@ -381,6 +373,17 @@ namespace CourtSideAPI.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CourtSideAPI.Model.Team", b =>
+                {
+                    b.HasOne("CourtSideAPI.Model.Coach", "Coach")
+                        .WithMany("Teams")
+                        .HasForeignKey("CoachId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Coach");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -434,26 +437,24 @@ namespace CourtSideAPI.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("CourtSideAPI.Model.Coach", b =>
+            modelBuilder.Entity("CourtSideAPI.Model.Player", b =>
                 {
                     b.HasOne("CourtSideAPI.Model.Team", "Team")
-                        .WithMany()
+                        .WithMany("Players")
                         .HasForeignKey("TeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Team");
                 });
 
-            modelBuilder.Entity("CourtSideAPI.Model.Player", b =>
+            modelBuilder.Entity("CourtSideAPI.Model.Team", b =>
                 {
-                    b.HasOne("CourtSideAPI.Model.Team", "Team")
-                        .WithMany()
-                        .HasForeignKey("TeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                    b.Navigation("Players");
+                });
 
-                    b.Navigation("Team");
+            modelBuilder.Entity("CourtSideAPI.Model.Coach", b =>
+                {
+                    b.Navigation("Teams");
                 });
 #pragma warning restore 612, 618
         }

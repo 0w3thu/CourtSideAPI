@@ -24,18 +24,23 @@ namespace CourtSideAPI.Data
         {
             base.OnModelCreating(builder);
 
-
-            builder.Entity<Coach>()
-                .HasOne(c => c.Team)
-                .WithMany()
-                .HasForeignKey(c => c.TeamId)
+            builder.Entity<Team>()
+                .HasOne(t => t.Coach)
+                .WithMany(c => c.Teams)
+                .HasForeignKey(t => t.CoachId)
                 .OnDelete(DeleteBehavior.Restrict);
+
 
             builder.Entity<Player>()
                 .HasOne(p => p.Team)
-                .WithMany()
+                .WithMany(t => t.Players)
                 .HasForeignKey(p => p.TeamId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<Team>()
+              .Property(t => t.Division)
+              .HasConversion<string>();
+
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using CourtSideAPI.Data;
 using CourtSideAPI.Model;
 using CourtSideAPI.Model.DTO;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -23,16 +24,19 @@ namespace CourtSideAPI.Controllers
         private readonly IConfiguration _configuration;
 
 
+        private readonly SignInManager<ApplicationUser> _signInManager;
+
         //Refresh Tokens
         private readonly TokenValidationParameters _tokenValidationParameters;
 
-        public AuthenticationController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<Guid>> roleManager, AppDbContext db, IConfiguration configuration, TokenValidationParameters tokenValidationParameters)
+        public AuthenticationController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<Guid>> roleManager, AppDbContext db, IConfiguration configuration, TokenValidationParameters tokenValidationParameters, SignInManager<ApplicationUser> signInManager)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _db = db;
             _configuration  = configuration;
             _tokenValidationParameters = tokenValidationParameters;
+            _signInManager = signInManager;
         }
 
         [HttpPost("register/coach")]
@@ -151,10 +155,22 @@ namespace CourtSideAPI.Controllers
             {
                 var existingUser = await _userManager.FindByEmailAsync(user.Email);
 
-
-                if (existingUser != null && await _userManager.CheckPasswordAsync(existingUser, user.Password))
+                if (existingUser == null)
                 {
-                    var tokenValue = await GenerateJwtTokenAsync(existingUser, ""); 
+                    return Unauthorized("Email or password is incorrect. Please try again");
+                }
+
+                var signInResult = await _signInManager
+                    .CheckPasswordSignInAsync(existingUser, user.Password, lockoutOnFailure: true);
+
+                if (signInResult.IsLockedOut)
+                {
+                    return StatusCode(429, "Too many failed attempts. Please try again later.");
+                }
+
+                if (signInResult.Succeeded)
+                {
+                    var tokenValue = await GenerateJwtTokenAsync(existingUser, "");
                     return Ok(tokenValue);
                 }
 
@@ -172,31 +188,32 @@ namespace CourtSideAPI.Controllers
 
         }
 
+        [AllowAnonymous]
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] TokenRequestDTO payload)
         {
-            try 
+            try
             {
                 var result = await VerifyAndGenerateTokenAysnc(payload);
 
-                if (result == null) return BadRequest("Invalid Tokens");
+                if (result == null)
+                    return BadRequest("Invalid Tokens");
 
                 return Ok(result);
-
             }
-            catch (Exception ex) when (ex.Message == "Token has not expired yet")
+            catch (SecurityTokenException ex)
             {
-                return BadRequest("Token has not expired yet");
+                return Unauthorized(new
+                {
+                    message = ex.Message
+                });
             }
-            catch (Exception ex) 
+            catch (Exception ex)
             {
-                Console.WriteLine($"Registration Error: {ex.Message}");
-
                 return StatusCode(500, new
                 {
-                    message = "An error occured during Token Refreshing"
+                    message = ex.Message
                 });
-
             }
         }
 
@@ -222,41 +239,55 @@ namespace CourtSideAPI.Controllers
                     ClockSkew = TimeSpan.Zero
                 };
 
+                // Add Validations
 
-                //Add Validations
+                // Check 1. Validate JWT format
+                var tokenInVerification = jwtTokenHanler.ValidateToken(
+                    payload.Token,
+                    refreshTokenValidationParameters,
+                    out var validatedToken
+                );
 
-                //Check 1. Check JWT Format
-                var tokenInVerification = jwtTokenHanler.ValidateToken(payload.Token, refreshTokenValidationParameters, out var validatedToken);
-
-                //2. Encryption algorithm 
-                if (validatedToken is JwtSecurityToken jwtSecurityToken)
+                // Check 2. Validate encryption algorithm
+                if (validatedToken is not JwtSecurityToken jwtSecurityToken)
                 {
-                    var result = jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase);
-
-                    if (result == false) return null;
-
+                    return null;
                 }
 
-                //Check 3. Validate expiry date
-                var utcExpiryDate = long.Parse(tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp).Value);
+                var result = jwtSecurityToken.Header.Alg.Equals(
+                    SecurityAlgorithms.HmacSha256,
+                    StringComparison.InvariantCultureIgnoreCase
+                );
 
-                var expiryDate = UnixTimeStampToDateTimeUTC(utcExpiryDate);
-                if (expiryDate > DateTime.UtcNow) throw new Exception("Token has not expired yet");
+                if (!result)
+                {
+                    return null;
+                }
+
+                // Check 3. Validate expiry date
+                var expiryClaim = tokenInVerification.Claims
+                    .FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp);
+
+                if (expiryClaim == null)
+                {
+                    return null;
+                }
+
 
                 //Check 4 . Refresh token exists in the DB
                 var dbRefreshToken = await _db.RefreshTokens.FirstOrDefaultAsync(n => n.Token == payload.RefreshToken);
 
-                if (dbRefreshToken is null) throw new Exception("Refresh token does not exist in  our database");
+                if (dbRefreshToken is null) throw new SecurityTokenException("Refresh token does not exist in  our database");
                 else
                 {
                     //Check 5 - Validate Id
                     var jti = tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
 
-                    if (dbRefreshToken.JwtId != jti) throw new Exception("Token does not match");
+                    if (dbRefreshToken.JwtId != jti) throw new SecurityTokenException("Token does not match");
 
-                    if (dbRefreshToken.DateExpired <= DateTime.UtcNow) throw new Exception("Your refresh token has expired please re-authenticate ");
+                    if (dbRefreshToken.DateExpired <= DateTime.UtcNow) throw new SecurityTokenException("Your refresh token has expired please re-authenticate ");
 
-                    if (dbRefreshToken.isRevoked) throw new Exception("Refresh Token is revoked");
+                    if (dbRefreshToken.isRevoked) throw new SecurityTokenException("Refresh Token is revoked");
 
 
                     //Generate new Token (with existing refresh token)
@@ -285,16 +316,19 @@ namespace CourtSideAPI.Controllers
 
         private async Task<AuthResultDTO> GenerateJwtTokenAsync(ApplicationUser user, string exisitingRefreshToken)
         {
-            var authClaims = new List<Claim>()
-             {
-               new Claim(ClaimTypes.Name, user.UserName ?? ""),
-               new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-               new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-               new Claim(JwtRegisteredClaimNames.Sub, user.Email ?? ""),
-               new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-             };
 
-            
+            var jti = Guid.NewGuid().ToString();
+
+            var authClaims = new List<Claim>()
+            {
+              new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+              new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+              new Claim(ClaimTypes.Name, user.UserName ?? ""),
+              new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
+              new Claim(JwtRegisteredClaimNames.Jti, jti)
+            };
+
+
             var userRoles = await _userManager.GetRolesAsync(user);
 
             foreach (var role in userRoles)
@@ -302,12 +336,12 @@ namespace CourtSideAPI.Controllers
                 authClaims.Add(new Claim(ClaimTypes.Role, role));
             }
 
-            var authSigninKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_configuration["JWT:Secret"]));
-            
+            var authSigninKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]!));
+
             var token = new JwtSecurityToken(
                 issuer: _configuration["JWT:Issuer"],
                 audience: _configuration["JWT:Audience"],
-                expires: DateTime.UtcNow.AddMinutes(1), //5-10 mins
+                expires: DateTime.UtcNow.AddMinutes(60), //60 mins
                 claims: authClaims,
                 signingCredentials: new SigningCredentials(authSigninKey, SecurityAlgorithms.HmacSha256)
                 );
@@ -320,7 +354,7 @@ namespace CourtSideAPI.Controllers
             {
                  refreshToken = new RefreshToken()
                 {
-                    JwtId = token.Id,
+                    JwtId = jti,
                     isRevoked = false,
                     UserId = user.Id,
                     DateAdded = DateTime.UtcNow,
@@ -332,11 +366,33 @@ namespace CourtSideAPI.Controllers
                 await _db.SaveChangesAsync();
             }
 
+            else
+            {
+                var existing = await _db.RefreshTokens
+                    .FirstOrDefaultAsync(r => r.Token == exisitingRefreshToken);
+
+                if (existing != null)
+                {
+                    existing.JwtId = jti;
+                    await _db.SaveChangesAsync();
+                }
+            }
+
+            // ADDED: return the user so the Android app can route by role.
             var response = new AuthResultDTO()
             {
                 Token = jwtToken,
                 RefreshToken = (string.IsNullOrEmpty(exisitingRefreshToken)) ? refreshToken.Token : exisitingRefreshToken,
-                ExpireAt = token.ValidTo
+                ExpireAt = token.ValidTo,
+
+                User = new AuthUserDTO
+                {
+                    UserId = user.Id.ToString(),
+                    FullName = user.FullName,
+                    Role = userRoles.FirstOrDefault() ?? "Guest",
+                    LanguagePref = string.IsNullOrEmpty(user.LanguagePref) ? "en" : user.LanguagePref
+                }
+
             };
 
             return response;
