@@ -247,13 +247,13 @@ public class SessionController : ControllerBase
     [Authorize(Roles = "Coach,Player")]
     public async Task<IActionResult> GetAllTeamSessions(Guid teamId)
     {
-        var teamExists = await _context.Teams
+        var teamExists = await _db.Teams
             .AnyAsync(t => t.TeamId == teamId);
 
         if (!teamExists)
             return NotFound("Team not found.");
 
-        var sessions = await _context.Sessions
+        var sessions = await _db.Sessions
             .Where(s => s.TeamId == teamId)
             .OrderBy(s => s.ScheduledDate)
             .ToListAsync();
