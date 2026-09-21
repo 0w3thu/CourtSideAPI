@@ -217,6 +217,14 @@ namespace CourtSideAPI.Controllers
             }
         }
 
+        [HttpGet("players")]
+        public async Task<IActionResult> GetPlayers()
+        {
+            var players = await _db.Players.ToListAsync();
+
+            return Ok(players);
+        }
+
         private async Task<AuthResultDTO> VerifyAndGenerateTokenAysnc(TokenRequestDTO payload)
         {
             try

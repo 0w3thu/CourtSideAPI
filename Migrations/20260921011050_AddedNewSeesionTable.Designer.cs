@@ -4,6 +4,7 @@ using CourtSideAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CourtSideAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921011050_AddedNewSeesionTable")]
+    partial class AddedNewSeesionTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -120,31 +123,6 @@ namespace CourtSideAPI.Migrations
                     b.HasDiscriminator<string>("Discriminator").HasValue("ApplicationUser");
 
                     b.UseTphMappingStrategy();
-                });
-
-            modelBuilder.Entity("CourtSideAPI.Model.Attendance", b =>
-                {
-                    b.Property<Guid>("AttendanceId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<bool>("IsPresent")
-                        .HasColumnType("bit");
-
-                    b.Property<Guid>("PlayerId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("SessionId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("AttendanceId");
-
-                    b.HasIndex("PlayerId");
-
-                    b.HasIndex("SessionId", "PlayerId")
-                        .IsUnique();
-
-                    b.ToTable("Attendances");
                 });
 
             modelBuilder.Entity("CourtSideAPI.Model.RefreshToken", b =>
@@ -430,25 +408,6 @@ namespace CourtSideAPI.Migrations
                     b.HasIndex("TeamId");
 
                     b.HasDiscriminator().HasValue("Player");
-                });
-
-            modelBuilder.Entity("CourtSideAPI.Model.Attendance", b =>
-                {
-                    b.HasOne("CourtSideAPI.Model.Player", "Player")
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CourtSideAPI.Model.Session", "Session")
-                        .WithMany()
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Player");
-
-                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("CourtSideAPI.Model.RefreshToken", b =>

@@ -345,4 +345,7 @@ public class TeamsController : ControllerBase
             return StatusCode(500, "An unexpected error occurred.");
         }
     }
+
+    
+
 }

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using System.Reflection.Emit;
 
 namespace CourtSideAPI.Data
 {
@@ -18,7 +19,10 @@ namespace CourtSideAPI.Data
         public DbSet<Guest> Guests { get; set; }
         public DbSet<Team> Teams { get; set; }
         public DbSet<RefreshToken> RefreshTokens {  get; set; }
-             
+        public DbSet<Session> Sessions { get; set; }
+
+        public DbSet<Attendance> Attendances { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -30,7 +34,6 @@ namespace CourtSideAPI.Data
                 .HasForeignKey(t => t.CoachId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-
             builder.Entity<Player>()
                 .HasOne(p => p.Team)
                 .WithMany(t => t.Players)
@@ -41,6 +44,33 @@ namespace CourtSideAPI.Data
               .Property(t => t.Division)
               .HasConversion<string>();
 
+            builder.Entity<Session>()
+             .HasOne(s => s.Team)
+             .WithMany()
+             .HasForeignKey(s => s.TeamId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Session>()
+              .Property(t => t.Status)
+              .HasConversion<string>();
+
+
+            //Attendance
+            builder.Entity<Attendance>()
+             .HasOne(a => a.Session)
+             .WithMany()
+             .HasForeignKey(a => a.SessionId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<Attendance>()
+             .HasOne(a => a.Player)
+             .WithMany()
+             .HasForeignKey(a => a.PlayerId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<Attendance>()
+                .HasIndex(a => new { a.SessionId, a.PlayerId })
+                .IsUnique();
         }
     }
 }
