@@ -214,7 +214,7 @@ for sensitive values.
 
 ---
 
-## 🔑 JWT Configuration
+##  JWT Configuration
 
 JWT configuration should be stored securely and should not contain production secrets inside `appsettings.json`.
 
@@ -246,7 +246,7 @@ dotnet user-secrets set "Jwt:Secret" "YOUR_SECRET"
 
 ---
 
-## ⚙️ Getting Started
+## Getting Started
 
 ### Prerequisites
 
